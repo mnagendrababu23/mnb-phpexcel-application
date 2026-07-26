@@ -9,7 +9,7 @@ use Mnb\PHPExcel\MnbExcel;
 
 final class SpreadsheetScheduler
 {
-    public function __construct(private readonly FileScheduler $scheduler)
+    public function __construct(private readonly SchedulerStoreInterface $scheduler)
     {
     }
 
@@ -47,5 +47,18 @@ final class SpreadsheetScheduler
             }
             throw new \RuntimeException('Unsupported scheduled spreadsheet task: ' . $type);
         }, $now);
+    }
+
+
+    /** Run due jobs continuously with locking, signal handling and bounded cycles. @param array<string,mixed> $options */
+    public function runForever(array $options = []): array
+    {
+        return (new SchedulerRunner($this))->runForever($options);
+    }
+
+    /** @return array<string,mixed> */
+    public function tasks(): array
+    {
+        return $this->scheduler->all();
     }
 }

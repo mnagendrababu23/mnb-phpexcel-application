@@ -6,7 +6,7 @@ namespace Mnb\PHPExcel\Application\Queue;
 
 use Mnb\PHPExcel\Support\MnbExcelException;
 
-final class FileQueue
+final class FileQueue implements QueueBackendInterface
 {
     public function __construct(private readonly string $directory)
     {
@@ -31,8 +31,9 @@ final class FileQueue
         return $job;
     }
 
-    public function reserve(): ?QueueJob
+    public function reserve(int $visibilityTimeoutSeconds = 300, ?string $workerId = null): ?QueueJob
     {
+        $this->releaseExpired($visibilityTimeoutSeconds);
         $files = glob($this->directory . DIRECTORY_SEPARATOR . 'pending' . DIRECTORY_SEPARATOR . '*.json') ?: [];
         sort($files, SORT_STRING);
         foreach ($files as $file) {
@@ -46,6 +47,8 @@ final class FileQueue
                 continue;
             }
             $data['attempts'] = (int) ($data['attempts'] ?? 0) + 1;
+            $data['reserved_at'] = time();
+            $data['reserved_by'] = $workerId ?? (gethostname() . ':' . getmypid());
             $this->write($target, $data);
             return QueueJob::fromArray($data);
         }
@@ -78,6 +81,31 @@ final class FileQueue
             $this->write($this->path('failed', $job->id), $data);
         }
         @unlink($source);
+    }
+
+
+    public function releaseExpired(int $visibilityTimeoutSeconds = 300): int
+    {
+        $released = 0;
+        $cutoff = time() - max(1, $visibilityTimeoutSeconds);
+        $files = glob($this->directory . DIRECTORY_SEPARATOR . 'processing' . DIRECTORY_SEPARATOR . '*.json') ?: [];
+        foreach ($files as $file) {
+            $data = $this->read($file);
+            $reservedAt = (int) ($data['reserved_at'] ?? filemtime($file) ?: 0);
+            if ($reservedAt > $cutoff) {
+                continue;
+            }
+            $id = (string) ($data['id'] ?? pathinfo($file, PATHINFO_FILENAME));
+            $data['available_at'] = time();
+            $data['last_error'] = 'Job reservation expired and was released.';
+            unset($data['reserved_at'], $data['reserved_by']);
+            $target = $this->path('pending', $id);
+            $this->write($target, $data);
+            if (@unlink($file)) {
+                $released++;
+            }
+        }
+        return $released;
     }
 
     /** @return array<string,int> */

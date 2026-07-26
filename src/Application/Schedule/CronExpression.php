@@ -14,7 +14,16 @@ final class CronExpression
 
     public function __construct(private readonly string $expression)
     {
-        $this->parts = preg_split('/\s+/', trim($expression)) ?: [];
+        $expanded = match (strtolower(trim($expression))) {
+            '@hourly' => '0 * * * *', '@daily', '@midnight' => '0 0 * * *', '@weekly' => '0 0 * * 0',
+            '@monthly' => '0 0 1 * *', '@yearly', '@annually' => '0 0 1 1 *', default => trim($expression),
+        };
+        $expanded = str_ireplace(
+            ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC','SUN','MON','TUE','WED','THU','FRI','SAT'],
+            ['1','2','3','4','5','6','7','8','9','10','11','12','0','1','2','3','4','5','6'],
+            $expanded
+        );
+        $this->parts = preg_split('/\s+/', $expanded) ?: [];
         if (count($this->parts) !== 5) {
             throw new MnbExcelException('Cron expression must contain five fields: minute hour day month weekday.');
         }

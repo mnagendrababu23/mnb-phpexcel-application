@@ -12,7 +12,7 @@ final class QueueWorker
     /** @var array<string,callable(array<string,mixed>,QueueJob):array<string,mixed>|mixed> */
     private array $handlers = [];
 
-    public function __construct(private readonly FileQueue $queue)
+    public function __construct(private readonly QueueBackendInterface $queue)
     {
     }
 
@@ -35,7 +35,10 @@ final class QueueWorker
         $results = [];
 
         while ($processed < $maxJobs && ($timeBudget <= 0 || microtime(true) - $started < $timeBudget)) {
-            $job = $this->queue->reserve();
+            $job = $this->queue->reserve(
+                max(1, (int) ($options['visibility_timeout_seconds'] ?? 300)),
+                isset($options['worker_id']) ? (string) $options['worker_id'] : null
+            );
             if ($job === null) {
                 break;
             }

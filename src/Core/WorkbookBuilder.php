@@ -19,6 +19,7 @@ use Mnb\PHPExcel\Writer\CsvWriter;
 use Mnb\PHPExcel\Writer\JsonWriter;
 use Mnb\PHPExcel\Writer\XmlWriter;
 use Mnb\PHPExcel\Writer\XlsxWriter;
+use Mnb\PHPExcel\Compatibility\XlsWriter;
 use PDO;
 
 final class WorkbookBuilder
@@ -452,11 +453,28 @@ final class WorkbookBuilder
             'filters' => array_values((array) ($options['filters'] ?? [])),
             'values' => $values,
             'style' => (string) ($options['style'] ?? 'PivotStyleMedium9'),
+            'layout' => in_array(strtolower((string) ($options['layout'] ?? 'compact')), ['compact', 'outline', 'tabular'], true) ? strtolower((string) ($options['layout'] ?? 'compact')) : 'compact',
             'width' => max(3, (int) ($options['width'] ?? 8)),
             'height' => max(5, (int) ($options['height'] ?? 20)),
+            'data_caption' => (string) ($options['data_caption'] ?? 'Values'),
+            'row_header_caption' => (string) ($options['row_header_caption'] ?? 'Row Labels'),
+            'column_header_caption' => (string) ($options['column_header_caption'] ?? 'Column Labels'),
+            'grand_total_caption' => (string) ($options['grand_total_caption'] ?? 'Grand Total'),
             'show_row_grand_totals' => (bool) ($options['show_row_grand_totals'] ?? true),
             'show_column_grand_totals' => (bool) ($options['show_column_grand_totals'] ?? true),
+            'show_row_headers' => (bool) ($options['show_row_headers'] ?? true),
+            'show_column_headers' => (bool) ($options['show_column_headers'] ?? true),
+            'show_row_stripes' => (bool) ($options['show_row_stripes'] ?? false),
+            'show_column_stripes' => (bool) ($options['show_column_stripes'] ?? false),
+            'show_last_column' => (bool) ($options['show_last_column'] ?? false),
+            'preserve_formatting' => (bool) ($options['preserve_formatting'] ?? true),
+            'show_drill' => (bool) ($options['show_drill'] ?? true),
+            'show_field_list' => (bool) ($options['show_field_list'] ?? true),
+            'show_empty_rows' => (bool) ($options['show_empty_rows'] ?? false),
+            'show_empty_columns' => (bool) ($options['show_empty_columns'] ?? false),
+            'repeat_item_labels' => (bool) ($options['repeat_item_labels'] ?? false),
             'refresh_on_load' => (bool) ($options['refresh_on_load'] ?? true),
+            'save_data' => (bool) ($options['save_data'] ?? false),
         ];
         return $this;
     }
@@ -1287,7 +1305,7 @@ final class WorkbookBuilder
     public function saveSafe(string $directory, string $filename, string $extension = 'xlsx'): string
     {
         $extension = strtolower(ltrim($extension, '.'));
-        if (!in_array($extension, ['xlsx', 'csv', 'json', 'xml'], true)) {
+        if (!in_array($extension, ['xlsx', 'xls', 'csv', 'json', 'xml'], true)) {
             throw MnbExcelException::withCode('Unsupported safe save extension: ' . $extension, ErrorCode::UNSUPPORTED_FORMAT, ['extension' => $extension]);
         }
 
@@ -1410,6 +1428,11 @@ final class WorkbookBuilder
 
         if ($extension === 'xlsx') {
             (new XlsxWriter())->write($workbook, $path);
+            return $path;
+        }
+
+        if ($extension === 'xls') {
+            (new XlsWriter())->write($workbook, $path);
             return $path;
         }
 

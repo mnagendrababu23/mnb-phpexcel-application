@@ -13,16 +13,24 @@ use Mnb\PHPExcel\Application\LoggerBridge;
 use Mnb\PHPExcel\Application\RowTransformerPipeline;
 use Mnb\PHPExcel\Application\UploadSafetyValidator;
 use Mnb\PHPExcel\Application\AjaxUploadHandler;
+use Mnb\PHPExcel\Application\AjaxUploader;
 use Mnb\PHPExcel\Application\MultiFileImportManager;
 use Mnb\PHPExcel\Application\SpreadsheetApi;
 use Mnb\PHPExcel\Application\Mail\CallbackMailer;
 use Mnb\PHPExcel\Application\Mail\MailerInterface;
 use Mnb\PHPExcel\Application\Mail\NativeMailer;
 use Mnb\PHPExcel\Application\Mail\SpreadsheetMailer;
+use Mnb\PHPExcel\Application\Mail\SmtpMailer;
 use Mnb\PHPExcel\Application\Queue\FileQueue;
+use Mnb\PHPExcel\Application\Queue\PdoQueue;
+use Mnb\PHPExcel\Application\Queue\QueueBackendInterface;
 use Mnb\PHPExcel\Application\Queue\SpreadsheetQueue;
 use Mnb\PHPExcel\Application\Schedule\FileScheduler;
+use Mnb\PHPExcel\Application\Schedule\PdoScheduler;
+use Mnb\PHPExcel\Application\Schedule\SchedulerRunner;
 use Mnb\PHPExcel\Application\Schedule\SpreadsheetScheduler;
+use Mnb\PHPExcel\Application\Http\HttpResponse;
+use Mnb\PHPExcel\Application\Http\SpreadsheetHttpEndpoint;
 use Mnb\PHPExcel\Core\CellValue;
 use Mnb\PHPExcel\Core\WorkbookBuilder;
 use Mnb\PHPExcel\Reader\CsvReader;
@@ -76,7 +84,7 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
-    public const VERSION = '1.5.0';
+    public const VERSION = '1.6.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
     private static ?DomainImportRegistry $domainImportRegistry = null;
@@ -770,6 +778,18 @@ final class MnbExcel
         return (new SpreadsheetApi())->handle($action, $request, $pdo);
     }
 
+    /** Complete HTTP endpoint with routing, authentication, CORS and rate limiting. @param array<string,mixed> $options */
+    public static function apiHttp(array $options = [], PDO|array|string|null $pdo = null): HttpResponse
+    {
+        return (new SpreadsheetHttpEndpoint(new SpreadsheetApi(), $options))->handleGlobals($pdo);
+    }
+
+    /** Generate a dependency-free browser upload form and client. @param array<string,mixed> $options */
+    public static function ajaxUploader(string $endpoint, array $options = []): string
+    {
+        return AjaxUploader::html($endpoint, $options);
+    }
+
     /** Import multiple spreadsheet files into one or dynamically resolved SQL table. */
     public static function importFilesToSql(array $files, PDO|array|string|null $pdo, string $table, array $options = []): array
     {
@@ -788,6 +808,18 @@ final class MnbExcel
         return new SpreadsheetQueue(new FileQueue($directory));
     }
 
+    /** Create a spreadsheet queue from any backend implementation. */
+    public static function queueBackend(QueueBackendInterface $backend): SpreadsheetQueue
+    {
+        return new SpreadsheetQueue($backend);
+    }
+
+    /** Create a transactional multi-host PDO queue. */
+    public static function pdoQueue(PDO $pdo, string $table = 'mnb_excel_queue'): SpreadsheetQueue
+    {
+        return new SpreadsheetQueue(new PdoQueue($pdo, $table));
+    }
+
     /** Process queued spreadsheet jobs without requiring a framework queue package. */
     public static function workQueue(string $directory, array $options = []): array
     {
@@ -802,10 +834,15 @@ final class MnbExcel
             $resolved = $mailer;
         } elseif (is_callable($mailer)) {
             $resolved = new CallbackMailer($mailer);
+        } elseif (is_array($options['smtp'] ?? null)) {
+            $resolved = new SmtpMailer((array) $options['smtp']);
         } else {
-            $resolved = new NativeMailer(is_callable($options['transport'] ?? null) ? $options['transport'] : null);
+            $resolved = new NativeMailer(
+                is_callable($options['transport'] ?? null) ? $options['transport'] : null,
+                (string) ($options['from'] ?? '')
+            );
         }
-        unset($options['mailer'], $options['transport']);
+        unset($options['mailer'], $options['transport'], $options['smtp'], $options['from']);
         return (new SpreadsheetMailer($resolved))->send($workbook, $to, $subject, $body, $options);
     }
 
@@ -813,6 +850,18 @@ final class MnbExcel
     public static function scheduler(string $storePath): SpreadsheetScheduler
     {
         return new SpreadsheetScheduler(new FileScheduler($storePath));
+    }
+
+    /** Create a transactional multi-host PDO scheduler. */
+    public static function pdoScheduler(PDO $pdo, string $table = 'mnb_excel_schedule'): SpreadsheetScheduler
+    {
+        return new SpreadsheetScheduler(new PdoScheduler($pdo, $table));
+    }
+
+    /** Run a scheduler continuously with process locking and graceful shutdown. @param array<string,mixed> $options */
+    public static function runScheduler(SpreadsheetScheduler $scheduler, array $options = []): array
+    {
+        return (new SchedulerRunner($scheduler))->runForever($options);
     }
 
     /** @param callable(array<string,mixed>):mixed $listener */

@@ -9,7 +9,7 @@ use DateTimeInterface;
 use Mnb\PHPExcel\Support\MnbExcelException;
 use Throwable;
 
-final class FileScheduler
+final class FileScheduler implements SchedulerStoreInterface
 {
     public function __construct(private readonly string $path)
     {

@@ -8,7 +8,7 @@ use Mnb\PHPExcel\MnbExcel;
 
 final class SpreadsheetQueue
 {
-    public function __construct(private readonly FileQueue $queue)
+    public function __construct(private readonly QueueBackendInterface $queue)
     {
     }
 
