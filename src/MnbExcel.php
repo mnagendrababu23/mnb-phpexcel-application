@@ -45,6 +45,7 @@ use Mnb\PHPExcel\Reader\XmlReader;
 use Mnb\PHPExcel\Reader\XlsxReader;
 use Mnb\PHPExcel\Reader\XlsxInspector;
 use Mnb\PHPExcel\Events\EventDispatcher;
+use Mnb\PHPExcel\Format\Xlsx;
 use Mnb\PHPExcel\Domain\DomainImportPreset;
 use Mnb\PHPExcel\Domain\DomainImportRegistry;
 use Mnb\PHPExcel\Domain\DomainImportType;
@@ -84,7 +85,7 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
-    public const VERSION = '1.6.0';
+    public const VERSION = '1.7.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
     private static ?DomainImportRegistry $domainImportRegistry = null;
@@ -760,6 +761,36 @@ final class MnbExcel
         return ImportJobRunner::resume($manifestPath, $pdo, $options);
     }
 
+    /** Return true when the XLSX is wrapped in an encrypted Office compound container. */
+    public static function isEncryptedXlsx(string $path): bool
+    {
+        return Xlsx::isEncrypted($path);
+    }
+
+    /** Return agile, standard, unknown, or null when the file is not encrypted. */
+    public static function xlsxEncryptionMode(string $path): ?string
+    {
+        return Xlsx::encryptionMode($path);
+    }
+
+    /** Encrypt an existing XLSX with Agile AES-256 or compatibility-mode Standard AES-128. */
+    public static function encryptXlsx(string $source, string $destination, string $password, array $options = []): void
+    {
+        Xlsx::encryptFile($source, $destination, $password, $options);
+    }
+
+    /** Decrypt a password-encrypted XLSX to a normal OOXML ZIP package. */
+    public static function decryptXlsx(string $source, string $destination, string $password, array $options = []): void
+    {
+        Xlsx::decryptFile($source, $destination, $password, $options);
+    }
+
+    /** Read file/workbook/worksheet protection metadata without exposing verifier material. */
+    public static function xlsxProtection(string $path, int|string $sheet = 1, array|ReaderOptions $options = []): array
+    {
+        return Xlsx::protection($path, $sheet, $options);
+    }
+
     /** Validate an uploaded file path or $_FILES-style array before import. */
     public static function validateUpload(array|string $file, array $options = []): array
     {
@@ -933,15 +964,15 @@ final class MnbExcel
      *
      * @return array<string,mixed>
      */
-    public static function inspect(string $path): array
+    public static function inspect(string $path, array $options = []): array
     {
-        return (new XlsxInspector())->inspect($path);
+        return (new XlsxInspector())->inspect($path, $options);
     }
 
     /** @return list<string> */
-    public static function sheetNames(string $path): array
+    public static function sheetNames(string $path, array $options = []): array
     {
-        return (new XlsxInspector())->sheetNames($path);
+        return (new XlsxInspector())->sheetNames($path, $options);
     }
 
     /**

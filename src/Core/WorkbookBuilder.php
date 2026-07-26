@@ -1055,6 +1055,64 @@ final class WorkbookBuilder
         return $this;
     }
 
+    /** Encrypt the final XLSX package with a password-to-open using Agile AES-256 encryption. */
+    public function encryptWithPassword(string $password, array $options = []): self
+    {
+        if ($password === '') {
+            throw new MnbExcelException('Encryption password cannot be empty.');
+        }
+        return $this->metadata([
+            '_mnb_xlsx_encryption' => array_replace($options, ['password' => $password]),
+        ]);
+    }
+
+    /** Protect workbook structure/windows with an OOXML password verifier. */
+    public function protectWorkbook(string $password, array $options = []): self
+    {
+        if ($password === '') {
+            throw new MnbExcelException('Workbook protection password cannot be empty.');
+        }
+        return $this->metadata([
+            '_mnb_workbook_protection' => array_replace($options, ['password' => $password]),
+        ]);
+    }
+
+    /** Protect one worksheet by name, or use "*" to protect every worksheet. */
+    public function protectSheet(string $sheet, string $password, array $options = []): self
+    {
+        $sheet = trim($sheet);
+        if ($sheet === '' || $password === '') {
+            throw new MnbExcelException('Worksheet name and protection password are required.');
+        }
+        $protections = (array) ($this->metadata['_mnb_sheet_protection'] ?? []);
+        $protections[$sheet] = array_replace($options, ['password' => $password]);
+        return $this->metadata(['_mnb_sheet_protection' => $protections]);
+    }
+
+    public function protectAllSheets(string $password, array $options = []): self
+    {
+        return $this->protectSheet('*', $password, $options);
+    }
+
+    /** Encrypt the file and optionally protect workbook structure and worksheets with one password. */
+    public function passwordProtectOutput(string $password, array $options = []): self
+    {
+        $encrypt = (bool) ($options['encrypt_file'] ?? true);
+        $workbook = (bool) ($options['protect_workbook'] ?? true);
+        $sheets = (bool) ($options['protect_sheets'] ?? true);
+        $common = (array) ($options['protection_options'] ?? []);
+        if ($encrypt) {
+            $this->encryptWithPassword($password, (array) ($options['encryption_options'] ?? []));
+        }
+        if ($workbook) {
+            $this->protectWorkbook($password, array_replace($common, (array) ($options['workbook_options'] ?? [])));
+        }
+        if ($sheets) {
+            $this->protectAllSheets($password, array_replace($common, (array) ($options['sheet_options'] ?? [])));
+        }
+        return $this;
+    }
+
     /** @param array<string,mixed> $metadata */
     public function metadata(array $metadata): self
     {

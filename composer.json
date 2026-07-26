@@ -5,11 +5,11 @@
     "license": "MIT",
     "require": {
         "php": ">=8.1",
-        "mnb/mnb-phpexcel-core": "^1.6",
+        "mnb/mnb-phpexcel-core": "^1.7",
         "mnb/mnb-phpexcel-csv": "^1.4",
         "mnb/mnb-phpexcel-json": "^1.4",
         "mnb/mnb-phpexcel-xml": "^1.6",
-        "mnb/mnb-phpexcel-xlsx": "^1.6",
+        "mnb/mnb-phpexcel-xlsx": "^1.7",
         "mnb/mnb-phpexcel-ods": "^1.6",
         "mnb/mnb-phpexcel-xls": "^1.6",
         "mnb/mnb-phpexcel-database": "^1.4"
