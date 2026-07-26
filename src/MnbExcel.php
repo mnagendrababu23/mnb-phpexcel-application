@@ -26,6 +26,10 @@ use Mnb\PHPExcel\Reader\XmlReader;
 use Mnb\PHPExcel\Reader\XlsxReader;
 use Mnb\PHPExcel\Reader\XlsxInspector;
 use Mnb\PHPExcel\Events\EventDispatcher;
+use Mnb\PHPExcel\Domain\DomainImportPreset;
+use Mnb\PHPExcel\Domain\DomainImportRegistry;
+use Mnb\PHPExcel\Domain\DomainImportType;
+use Mnb\PHPExcel\Import\DomainImporter;
 use Mnb\PHPExcel\Import\ImportQualityAnalyzer;
 use Mnb\PHPExcel\Large\ImportMethodAdvisor;
 use Mnb\PHPExcel\Large\LargeExcelDatabaseImportEngine;
@@ -61,9 +65,10 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
-    public const VERSION = '1.3.0';
+    public const VERSION = '1.4.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
+    private static ?DomainImportRegistry $domainImportRegistry = null;
 
     public static function version(): string
     {
@@ -940,6 +945,71 @@ final class MnbExcel
             'alignment' => ['horizontal' => 'center', 'vertical' => 'center', 'wrap_text' => true],
             'border' => true,
         ]);
+    }
+
+    /** @return array<string,array<string,mixed>> */
+    public static function domainImportSchemas(): array
+    {
+        return self::domainImporter()->schemas();
+    }
+
+    /** @return array<string,mixed> */
+    public static function domainImportSchema(DomainImportType|string $domain): array
+    {
+        return self::domainImporter()->schema($domain);
+    }
+
+    /** Replace one built-in preset for this process. */
+    public static function registerDomainImportPreset(DomainImportPreset $preset): void
+    {
+        self::domainImportRegistry()->register($preset);
+    }
+
+    /** @param array<string,mixed> $options */
+    public static function domainImportTemplate(DomainImportType|string $domain, array $options = []): WorkbookBuilder
+    {
+        $preset = self::domainImportRegistry()->get($domain);
+        return WorkbookBuilder::importTemplate($preset->templateColumns(), array_replace([
+            'title' => ucwords(str_replace('_', ' ', $preset->type->value)) . ' Import Template',
+            'instructions' => 'Complete the required columns. Header aliases are accepted during import.',
+            'sample_rows' => 1,
+        ], $options));
+    }
+
+    /** @param array<string,mixed> $options @return array<string,mixed> */
+    public static function previewDomainImport(DomainImportType|string $domain, string $path, array $options = []): array
+    {
+        return self::domainImporter()->preview($domain, $path, $options);
+    }
+
+    /** @param PDO|array<string,mixed>|string|null $pdo @param array<string,mixed> $options @return array<string,mixed> */
+    public static function importDomain(DomainImportType|string $domain, string $path, PDO|array|string|null $pdo = null, string $table = '', array $options = []): array
+    {
+        return self::domainImporter()->import($domain, $path, $pdo, $table, $options);
+    }
+
+    public static function importUsers(string $path, PDO|array|string|null $pdo = null, string $table = 'users', array $options = []): array { return self::importDomain(DomainImportType::Users, $path, $pdo, $table, $options); }
+    public static function importProducts(string $path, PDO|array|string|null $pdo = null, string $table = 'products', array $options = []): array { return self::importDomain(DomainImportType::Products, $path, $pdo, $table, $options); }
+    public static function importOrders(string $path, PDO|array|string|null $pdo = null, string $table = 'orders', array $options = []): array { return self::importDomain(DomainImportType::Orders, $path, $pdo, $table, $options); }
+    public static function importInventory(string $path, PDO|array|string|null $pdo = null, string $table = 'inventory', array $options = []): array { return self::importDomain(DomainImportType::Inventory, $path, $pdo, $table, $options); }
+    public static function importStudents(string $path, PDO|array|string|null $pdo = null, string $table = 'students', array $options = []): array { return self::importDomain(DomainImportType::Students, $path, $pdo, $table, $options); }
+    public static function importAttendance(string $path, PDO|array|string|null $pdo = null, string $table = 'attendance', array $options = []): array { return self::importDomain(DomainImportType::Attendance, $path, $pdo, $table, $options); }
+    public static function importMarks(string $path, PDO|array|string|null $pdo = null, string $table = 'marks', array $options = []): array { return self::importDomain(DomainImportType::Marks, $path, $pdo, $table, $options); }
+    public static function importContacts(string $path, PDO|array|string|null $pdo = null, string $table = 'contacts', array $options = []): array { return self::importDomain(DomainImportType::Contacts, $path, $pdo, $table, $options); }
+    public static function importLocations(string $path, PDO|array|string|null $pdo = null, string $table = 'locations', array $options = []): array { return self::importDomain(DomainImportType::Locations, $path, $pdo, $table, $options); }
+    public static function importBlogPosts(string $path, PDO|array|string|null $pdo = null, string $table = 'blog_posts', array $options = []): array { return self::importDomain(DomainImportType::BlogPosts, $path, $pdo, $table, $options); }
+    public static function importImagesWithPaths(string $path, PDO|array|string|null $pdo = null, string $table = 'media', array $options = []): array { return self::importDomain(DomainImportType::Media, $path, $pdo, $table, $options); }
+    public static function importMedia(string $path, PDO|array|string|null $pdo = null, string $table = 'media', array $options = []): array { return self::importImagesWithPaths($path, $pdo, $table, $options); }
+    public static function importCategories(string $path, PDO|array|string|null $pdo = null, string $table = 'categories', array $options = []): array { return self::importDomain(DomainImportType::Categories, $path, $pdo, $table, $options); }
+
+    private static function domainImporter(): DomainImporter
+    {
+        return DomainImporter::create(self::domainImportRegistry(), self::readerRegistry());
+    }
+
+    private static function domainImportRegistry(): DomainImportRegistry
+    {
+        return self::$domainImportRegistry ??= DomainImportRegistry::withBuiltIns();
     }
 
     private static function readerRegistry(): ReaderRegistry
