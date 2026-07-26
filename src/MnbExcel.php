@@ -61,7 +61,7 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.3.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
 

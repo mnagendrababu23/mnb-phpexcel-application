@@ -42,6 +42,22 @@ final class WorkbookBuilder
 
     private bool $freezeHeader = false;
     private bool $autoFilter = false;
+    private int $freezeRows = 0;
+    private int $freezeColumns = 0;
+    private ?string $freezeTopLeftCell = null;
+    private ?string $autoFilterRange = null;
+
+    /** @var list<array<string,mixed>> */
+    private array $filterColumns = [];
+
+    /** @var list<array<string,mixed>> */
+    private array $nativeConditionalFormats = [];
+
+    /** @var list<array<string,mixed>> */
+    private array $dataValidations = [];
+
+    /** @var array<string,list<array<string,mixed>>> */
+    private array $charts = [];
     private bool $escapeFormulaLikeText = true;
 
     /** @var array<string, mixed>|string */
@@ -220,6 +236,230 @@ final class WorkbookBuilder
     {
         $this->autoFilter = $enabled;
         return $this;
+    }
+
+
+    /** Freeze arbitrary rows and columns. Example: freezePanes(1, 2) freezes row 1 and columns A:B. */
+    public function freezePanes(int $rows = 1, int $columns = 0, ?string $topLeftCell = null): self
+    {
+        if ($rows < 0 || $columns < 0) {
+            throw new MnbExcelException('Freeze rows and columns cannot be negative.');
+        }
+        if ($topLeftCell !== null) {
+            $topLeftCell = $this->normalizeCellReference($topLeftCell, 'freeze pane');
+        }
+        $this->freezeRows = $rows;
+        $this->freezeColumns = $columns;
+        $this->freezeTopLeftCell = $topLeftCell;
+        $this->freezeHeader = false;
+        return $this;
+    }
+
+    /** Freeze all rows above and columns left of the selected cell. */
+    public function freezeAt(string $cell): self
+    {
+        $cell = $this->normalizeCellReference($cell, 'freeze pane');
+        [$column, $row] = Coordinate::splitCellRef($cell);
+        return $this->freezePanes(max(0, $row - 1), max(0, $column - 1), $cell);
+    }
+
+    /** Configure an explicit auto-filter range such as A1:H500. */
+    public function autoFilterRange(string $range): self
+    {
+        $this->autoFilterRange = $this->normalizeRangeReference($range, 'auto-filter');
+        $this->autoFilter = true;
+        return $this;
+    }
+
+    /**
+     * Add a native Excel filter definition.
+     *
+     * Supported types: values, custom, top10, dynamic, color.
+     * @param array<string,mixed> $criteria
+     */
+    public function filterColumn(int|string $column, array $criteria): self
+    {
+        $index = is_int($column) || ctype_digit((string) $column)
+            ? (int) $column
+            : Coordinate::columnNameToIndex((string) $column);
+        if ($index < 1) {
+            throw new MnbExcelException('Filter column must be a positive index or Excel column name.');
+        }
+        $type = strtolower((string) ($criteria['type'] ?? 'values'));
+        if (!in_array($type, ['values', 'custom', 'top10', 'dynamic', 'color'], true)) {
+            throw new MnbExcelException('Unsupported filter type: ' . $type);
+        }
+        $criteria['type'] = $type;
+        $criteria['column'] = $index;
+        $this->filterColumns[] = $criteria;
+        $this->autoFilter = true;
+        return $this;
+    }
+
+    /** @param list<mixed> $values */
+    public function filterValues(int|string $column, array $values, bool $includeBlank = false): self
+    {
+        return $this->filterColumn($column, ['type' => 'values', 'values' => array_values($values), 'include_blank' => $includeBlank]);
+    }
+
+    /** Add a native conditional-formatting rule to an XLSX range. */
+    public function conditionalFormatting(string $range, string $type, array $options = []): self
+    {
+        $range = $this->normalizeRangeReference($range, 'conditional formatting');
+        $type = strtolower(trim($type));
+        if (!in_array($type, ['cell_is', 'expression', 'color_scale', 'data_bar', 'icon_set', 'top10', 'duplicate_values', 'unique_values', 'contains_text', 'time_period'], true)) {
+            throw new MnbExcelException('Unsupported conditional-formatting type: ' . $type);
+        }
+        $this->nativeConditionalFormats[] = ['range' => $range, 'type' => $type] + $options;
+        return $this;
+    }
+
+    public function conditionalCellIs(string $range, string $operator, mixed $formula, string|array $style): self
+    {
+        $formulas = is_array($formula) ? array_values($formula) : [$formula];
+        return $this->conditionalFormatting($range, 'cell_is', [
+            'operator' => $operator,
+            'formulas' => $formulas,
+            'style' => $style,
+        ]);
+    }
+
+    public function conditionalExpression(string $range, string $formula, string|array $style): self
+    {
+        return $this->conditionalFormatting($range, 'expression', ['formulas' => [$formula], 'style' => $style]);
+    }
+
+    /** @param list<string> $colors */
+    public function conditionalColorScale(string $range, array $colors = ['#F8696B', '#FFEB84', '#63BE7B']): self
+    {
+        return $this->conditionalFormatting($range, 'color_scale', ['colors' => array_values($colors)]);
+    }
+
+    public function conditionalDataBar(string $range, string $color = '#638EC6'): self
+    {
+        return $this->conditionalFormatting($range, 'data_bar', ['color' => $color]);
+    }
+
+    public function conditionalIconSet(string $range, string $iconSet = '3TrafficLights1'): self
+    {
+        return $this->conditionalFormatting($range, 'icon_set', ['icon_set' => $iconSet]);
+    }
+
+    /** Add native Excel data validation to a range. */
+    public function dataValidation(string $range, string $type, array $options = []): self
+    {
+        $range = $this->normalizeRangeReference($range, 'data validation');
+        $type = strtolower(trim($type));
+        if (!in_array($type, ['list', 'whole', 'decimal', 'date', 'time', 'text_length', 'custom'], true)) {
+            throw new MnbExcelException('Unsupported data-validation type: ' . $type);
+        }
+        $this->dataValidations[] = ['range' => $range, 'type' => $type] + $options;
+        return $this;
+    }
+
+    /** @param list<string|int|float> $values */
+    public function validationList(string $range, array $values, array $options = []): self
+    {
+        return $this->dataValidation($range, 'list', ['values' => array_values($values)] + $options);
+    }
+
+    /**
+     * Add a native chart. Series items contain name, values and optional categories.
+     *
+     * @param list<array{name?:string,values:string,categories?:string}> $series
+     * @param array<string,mixed> $options
+     */
+    public function addChart(string $type, string $title, array $series, array $options = []): self
+    {
+        $type = strtolower(trim($type));
+        if (!in_array($type, ['column', 'bar', 'line', 'area', 'pie', 'doughnut', 'scatter'], true)) {
+            throw new MnbExcelException('Unsupported chart type: ' . $type);
+        }
+        if ($series === []) {
+            throw new MnbExcelException('A chart requires at least one series.');
+        }
+        foreach ($series as $item) {
+            if (!isset($item['values']) || trim((string) $item['values']) === '') {
+                throw new MnbExcelException('Every chart series requires a values range.');
+            }
+        }
+        $sheetKey = $this->annotationSheetKey($options['sheet'] ?? null);
+        $this->charts[$sheetKey][] = [
+            'type' => $type,
+            'title' => $title,
+            'series' => array_values($series),
+            'from' => strtoupper((string) ($options['from'] ?? $options['cell'] ?? 'A1')),
+            'to' => strtoupper((string) ($options['to'] ?? 'H16')),
+            'legend' => (string) ($options['legend'] ?? 'right'),
+            'style' => max(1, min(48, (int) ($options['style'] ?? 10))),
+            'vary_colors' => (bool) ($options['vary_colors'] ?? in_array($type, ['pie', 'doughnut'], true)),
+        ];
+        return $this;
+    }
+
+    /**
+     * Build a reusable import template with header styling, instructions and validation rules.
+     *
+     * @param array<int|string,string|array<string,mixed>> $columns
+     * @param array<string,mixed> $options
+     */
+    public static function importTemplate(array $columns, array $options = []): self
+    {
+        $headers = [];
+        $definitions = [];
+        foreach ($columns as $key => $definition) {
+            if (is_array($definition)) {
+                $name = (string) ($definition['header'] ?? $definition['name'] ?? $key);
+                $definitions[] = $definition + ['header' => $name];
+                $headers[] = $name;
+            } else {
+                $headers[] = (string) $definition;
+                $definitions[] = ['header' => (string) $definition];
+            }
+        }
+        $sampleRows = max(1, (int) ($options['sample_rows'] ?? 1));
+        $rows = [];
+        for ($i = 0; $i < $sampleRows; $i++) {
+            $row = [];
+            foreach ($definitions as $definition) {
+                $row[] = $i === 0 ? ($definition['example'] ?? '') : '';
+            }
+            $rows[] = $row;
+        }
+        $builder = self::fromArray($rows)
+            ->withHeader()
+            ->columns($headers)
+            ->styleHeader($options['header_style'] ?? 'mnb.header.blue')
+            ->freezeHeader()
+            ->autoFilter()
+            ->autoWidth(['min' => 12, 'max' => 45, 'padding' => 3])
+            ->metadata(['title' => (string) ($options['title'] ?? 'Import Template')]);
+
+        if (isset($options['instructions']) && (string) $options['instructions'] !== '') {
+            $builder->title((string) $options['instructions'], ['style' => 'mnb.subtitle', 'merge' => true]);
+        }
+        $lastRow = max(1000, (int) ($options['validation_rows'] ?? 10000));
+        foreach ($definitions as $index => $definition) {
+            $columnName = Coordinate::columnIndexToName($index + 1);
+            $dataStart = ($options['instructions'] ?? '') !== '' ? 3 : 2;
+            $range = $columnName . $dataStart . ':' . $columnName . $lastRow;
+            if (isset($definition['list']) && is_array($definition['list'])) {
+                $builder->validationList($range, $definition['list'], [
+                    'allow_blank' => !($definition['required'] ?? false),
+                    'prompt_title' => $definition['header'],
+                    'prompt' => $definition['description'] ?? null,
+                    'error' => $definition['error'] ?? null,
+                ]);
+            } elseif (isset($definition['validation']) && is_array($definition['validation'])) {
+                $validation = $definition['validation'];
+                $builder->dataValidation($range, (string) ($validation['type'] ?? 'custom'), $validation);
+            }
+            if (($definition['required'] ?? false) === true) {
+                $headerRow = ($options['instructions'] ?? '') !== '' ? 2 : 1;
+                $builder->comment($columnName . $headerRow, 'MNB PHPExcel', 'Required field' . (isset($definition['description']) ? ': ' . $definition['description'] : ''));
+            }
+        }
+        return $builder;
     }
 
     /** @param array<string, mixed>|string $style */
@@ -821,6 +1061,33 @@ final class WorkbookBuilder
         return $this->preserveAdvancedObjectsFrom($xlsxPath, $options);
     }
 
+
+    /**
+     * Preserve working pivot tables from an XLSX template and bind their cache
+     * to a new source range. Excel refreshes the pivot cache when the file opens.
+     *
+     * This is template-driven pivot support: create/layout the pivot once in
+     * Excel, then use this method to replace its source data safely.
+     */
+    public function preservePivotTablesFrom(
+        string $xlsxPath,
+        string $sourceSheet,
+        string $sourceRange,
+        array $options = []
+    ): self {
+        $sourceSheet = trim($sourceSheet);
+        if ($sourceSheet === '') {
+            throw new MnbExcelException('Pivot source sheet cannot be empty.');
+        }
+        $sourceRange = $this->normalizeRangeReference($sourceRange, 'pivot source');
+        return $this->preserveAdvancedObjectsFrom($xlsxPath, array_replace([
+            'pivot_source_sheet' => $sourceSheet,
+            'pivot_source_range' => $sourceRange,
+            'pivot_refresh_on_load' => true,
+            'preserve_workbook_pivot_caches' => true,
+        ], $options));
+    }
+
     /**
      * Add a dedicated import summary sheet, useful beside failed-row reports.
      *
@@ -1296,7 +1563,15 @@ final class WorkbookBuilder
                 comments: $this->commentsForSheet((string) $sheetName),
                 sourceColumnKeys: $keys,
                 dataRowStart: count($this->titleRows) + ($this->withHeader ? 1 : 0),
-                dataRowCount: count($rows)
+                dataRowCount: count($rows),
+                freezeRows: $this->freezeRows,
+                freezeColumns: $this->freezeColumns,
+                freezeTopLeftCell: $this->freezeTopLeftCell,
+                autoFilterRange: $this->autoFilterRange,
+                filterColumns: $this->filterColumns,
+                conditionalFormats: $this->nativeConditionalFormats,
+                dataValidations: $this->dataValidations,
+                charts: $this->chartsForSheet((string) $sheetName)
             );
         }
 
@@ -1455,6 +1730,21 @@ final class WorkbookBuilder
     private function sanitizeText(string $value): string
     {
         return ValueSanitizer::sanitizeCellText($value, $this->cellSafetyOptions);
+    }
+
+    private function normalizeRangeReference(string $range, string $context): string
+    {
+        $range = strtoupper(trim($range));
+        if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/', $range) !== 1) {
+            throw new MnbExcelException('Invalid ' . $context . ' range: ' . $range);
+        }
+        return $range;
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function chartsForSheet(string $sheetName): array
+    {
+        return array_merge($this->charts['*'] ?? [], $this->charts[$sheetName] ?? []);
     }
 
     private function sanitizeSheetName(string $name): string
