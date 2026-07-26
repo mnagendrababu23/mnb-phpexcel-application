@@ -58,6 +58,9 @@ final class WorkbookBuilder
 
     /** @var array<string,list<array<string,mixed>>> */
     private array $charts = [];
+
+    /** @var array<string,list<array<string,mixed>>> */
+    private array $pivotTables = [];
     private bool $escapeFormulaLikeText = true;
 
     /** @var array<string, mixed>|string */
@@ -393,6 +396,67 @@ final class WorkbookBuilder
             'legend' => (string) ($options['legend'] ?? 'right'),
             'style' => max(1, min(48, (int) ($options['style'] ?? 10))),
             'vary_colors' => (bool) ($options['vary_colors'] ?? in_array($type, ['pie', 'doughnut'], true)),
+        ];
+        return $this;
+    }
+
+    /**
+     * Create a native pivot table from source data without requiring a template.
+     *
+     * Options: sheet (target sheet), rows, columns, filters, values, style, width, height.
+     * Field references may be header names, one-based indexes, or Excel column names.
+     * Values items: ['field' => 'Amount', 'function' => 'sum', 'name' => 'Total Amount'].
+     *
+     * @param array<string,mixed> $options
+     */
+    public function addPivotTable(
+        string $name,
+        string $sourceSheet,
+        string $sourceRange,
+        string $targetCell = 'A1',
+        array $options = []
+    ): self {
+        $name = trim($name);
+        if ($name === '') {
+            throw new MnbExcelException('Pivot table name cannot be empty.');
+        }
+        $sourceSheet = trim($sourceSheet);
+        if ($sourceSheet === '' || !array_key_exists($sourceSheet, $this->sourceSheets)) {
+            throw new MnbExcelException('Pivot source sheet not found: ' . $sourceSheet);
+        }
+        $sourceRange = $this->normalizeRangeReference($sourceRange, 'pivot source');
+        $targetCell = $this->normalizeCellReference($targetCell, 'pivot target');
+        $targetSheet = $this->annotationSheetKey($options['sheet'] ?? null);
+        $values = array_values((array) ($options['values'] ?? []));
+        if ($values === []) {
+            throw new MnbExcelException('A pivot table requires at least one value field.');
+        }
+        $allowedFunctions = ['sum', 'count', 'average', 'max', 'min', 'product', 'count_nums', 'std_dev', 'std_dev_p', 'var', 'var_p'];
+        foreach ($values as $index => $value) {
+            if (!is_array($value) || !array_key_exists('field', $value)) {
+                throw new MnbExcelException('Pivot value #' . ($index + 1) . ' requires a field.');
+            }
+            $function = strtolower((string) ($value['function'] ?? 'sum'));
+            if (!in_array($function, $allowedFunctions, true)) {
+                throw new MnbExcelException('Unsupported pivot aggregation: ' . $function);
+            }
+            $values[$index]['function'] = $function;
+        }
+        $this->pivotTables[$targetSheet][] = [
+            'name' => preg_replace('/[^A-Za-z0-9_]+/', '_', $name) ?: 'PivotTable',
+            'source_sheet' => $sourceSheet,
+            'source_range' => $sourceRange,
+            'target_cell' => $targetCell,
+            'rows' => array_values((array) ($options['rows'] ?? [])),
+            'columns' => array_values((array) ($options['columns'] ?? [])),
+            'filters' => array_values((array) ($options['filters'] ?? [])),
+            'values' => $values,
+            'style' => (string) ($options['style'] ?? 'PivotStyleMedium9'),
+            'width' => max(3, (int) ($options['width'] ?? 8)),
+            'height' => max(5, (int) ($options['height'] ?? 20)),
+            'show_row_grand_totals' => (bool) ($options['show_row_grand_totals'] ?? true),
+            'show_column_grand_totals' => (bool) ($options['show_column_grand_totals'] ?? true),
+            'refresh_on_load' => (bool) ($options['refresh_on_load'] ?? true),
         ];
         return $this;
     }
@@ -1571,7 +1635,8 @@ final class WorkbookBuilder
                 filterColumns: $this->filterColumns,
                 conditionalFormats: $this->nativeConditionalFormats,
                 dataValidations: $this->dataValidations,
-                charts: $this->chartsForSheet((string) $sheetName)
+                charts: $this->chartsForSheet((string) $sheetName),
+                pivotTables: $this->pivotTablesForSheet((string) $sheetName)
             );
         }
 
@@ -1745,6 +1810,12 @@ final class WorkbookBuilder
     private function chartsForSheet(string $sheetName): array
     {
         return array_merge($this->charts['*'] ?? [], $this->charts[$sheetName] ?? []);
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function pivotTablesForSheet(string $sheetName): array
+    {
+        return $this->pivotTables[$sheetName] ?? [];
     }
 
     private function sanitizeSheetName(string $name): string

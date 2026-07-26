@@ -12,6 +12,17 @@ use Mnb\PHPExcel\Application\ImportDashboardHelper;
 use Mnb\PHPExcel\Application\LoggerBridge;
 use Mnb\PHPExcel\Application\RowTransformerPipeline;
 use Mnb\PHPExcel\Application\UploadSafetyValidator;
+use Mnb\PHPExcel\Application\AjaxUploadHandler;
+use Mnb\PHPExcel\Application\MultiFileImportManager;
+use Mnb\PHPExcel\Application\SpreadsheetApi;
+use Mnb\PHPExcel\Application\Mail\CallbackMailer;
+use Mnb\PHPExcel\Application\Mail\MailerInterface;
+use Mnb\PHPExcel\Application\Mail\NativeMailer;
+use Mnb\PHPExcel\Application\Mail\SpreadsheetMailer;
+use Mnb\PHPExcel\Application\Queue\FileQueue;
+use Mnb\PHPExcel\Application\Queue\SpreadsheetQueue;
+use Mnb\PHPExcel\Application\Schedule\FileScheduler;
+use Mnb\PHPExcel\Application\Schedule\SpreadsheetScheduler;
 use Mnb\PHPExcel\Core\CellValue;
 use Mnb\PHPExcel\Core\WorkbookBuilder;
 use Mnb\PHPExcel\Reader\CsvReader;
@@ -65,7 +76,7 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
-    public const VERSION = '1.4.0';
+    public const VERSION = '1.5.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
     private static ?DomainImportRegistry $domainImportRegistry = null;
@@ -745,6 +756,63 @@ final class MnbExcel
     public static function validateUpload(array|string $file, array $options = []): array
     {
         return UploadSafetyValidator::validate($file, $options);
+    }
+
+    /** Store a validated $_FILES-style upload and return an AJAX/API-ready response. */
+    public static function handleAjaxUpload(array|string $file, array $options = []): array
+    {
+        return (new AjaxUploadHandler())->handle($file, $options);
+    }
+
+    /** Framework-neutral spreadsheet API dispatcher for upload, preview, import, status, and export actions. */
+    public static function api(string $action, array $request, PDO|array|string|null $pdo = null): array
+    {
+        return (new SpreadsheetApi())->handle($action, $request, $pdo);
+    }
+
+    /** Import multiple spreadsheet files into one or dynamically resolved SQL table. */
+    public static function importFilesToSql(array $files, PDO|array|string|null $pdo, string $table, array $options = []): array
+    {
+        return (new MultiFileImportManager())->importToSql($files, $pdo, $table, $options);
+    }
+
+    /** Import multiple files through one typed domain preset. */
+    public static function importDomainFiles(DomainImportType|string $domain, array $files, PDO|array|string|null $pdo = null, string $table = '', array $options = []): array
+    {
+        return (new MultiFileImportManager())->importDomain($domain, $files, $pdo, $table, $options);
+    }
+
+    /** Create the built-in durable filesystem queue. */
+    public static function queue(string $directory): SpreadsheetQueue
+    {
+        return new SpreadsheetQueue(new FileQueue($directory));
+    }
+
+    /** Process queued spreadsheet jobs without requiring a framework queue package. */
+    public static function workQueue(string $directory, array $options = []): array
+    {
+        return self::queue($directory)->work($options);
+    }
+
+    /** Send a generated or existing spreadsheet as a MIME email attachment. */
+    public static function emailGeneratedExcel(WorkbookBuilder|string $workbook, string|array $to, string $subject, string $body = '', array $options = []): bool
+    {
+        $mailer = $options['mailer'] ?? null;
+        if ($mailer instanceof MailerInterface) {
+            $resolved = $mailer;
+        } elseif (is_callable($mailer)) {
+            $resolved = new CallbackMailer($mailer);
+        } else {
+            $resolved = new NativeMailer(is_callable($options['transport'] ?? null) ? $options['transport'] : null);
+        }
+        unset($options['mailer'], $options['transport']);
+        return (new SpreadsheetMailer($resolved))->send($workbook, $to, $subject, $body, $options);
+    }
+
+    /** Create a persistent cron-style import/export scheduler. */
+    public static function scheduler(string $storePath): SpreadsheetScheduler
+    {
+        return new SpreadsheetScheduler(new FileScheduler($storePath));
     }
 
     /** @param callable(array<string,mixed>):mixed $listener */
