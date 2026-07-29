@@ -1,18 +1,19 @@
 {
     "name": "mnb/mnb-phpexcel-application",
-    "description": "Legacy facade, workbook builder, application helpers, plugins, diagnostics, and full workflow API for MNB PHPExcel.",
+    "description": "Facade, workbook builder, application helpers, plugins, diagnostics, and full workflow API for MNB PHPExcel.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.1",
-        "mnb/mnb-phpexcel-core": "^1.7",
-        "mnb/mnb-phpexcel-csv": "^1.4",
-        "mnb/mnb-phpexcel-json": "^1.4",
-        "mnb/mnb-phpexcel-xml": "^1.6",
-        "mnb/mnb-phpexcel-xlsx": "^1.8",
-        "mnb/mnb-phpexcel-ods": "^1.6",
-        "mnb/mnb-phpexcel-xls": "^1.6",
-        "mnb/mnb-phpexcel-database": "^1.4"
+        "mnb/mnb-phpexcel-core": "^2.0",
+        "mnb/mnb-phpexcel-csv": "^2.0",
+        "mnb/mnb-phpexcel-json": "^2.0",
+        "mnb/mnb-phpexcel-xml": "^2.0",
+        "mnb/mnb-phpexcel-xlsx": "^2.0",
+        "mnb/mnb-phpexcel-ods": "^2.0",
+        "mnb/mnb-phpexcel-xls": "^2.0",
+        "mnb/mnb-phpexcel-database": "^2.0",
+        "mnb/mnb-phpexcel-database-xlsx": "^2.0"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,

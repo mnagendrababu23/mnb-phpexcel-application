@@ -39,7 +39,7 @@ use Mnb\PHPExcel\Reader\ReadSession;
 use Mnb\PHPExcel\Reader\ReaderRegistry;
 use Mnb\PHPExcel\Reader\Options\ReaderOptions;
 use Mnb\PHPExcel\Reader\OdsReader;
-use Mnb\PHPExcel\Compatibility\XlsReader;
+use Mnb\PHPExcel\Reader\XlsReader;
 use Mnb\PHPExcel\Contracts\ReaderPluginInterface;
 use Mnb\PHPExcel\Reader\XmlReader;
 use Mnb\PHPExcel\Reader\XlsxReader;
@@ -85,7 +85,7 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
-    public const VERSION = '1.8.0';
+    public const VERSION = '2.0.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
     private static ?DomainImportRegistry $domainImportRegistry = null;
@@ -197,6 +197,7 @@ final class MnbExcel
         return WorkbookBuilder::fromWorkbookArray($sheets);
     }
 
+
     /**
      * Create a standalone workbook containing import summary metrics.
      *
@@ -228,6 +229,7 @@ final class MnbExcel
     {
         return \Mnb\PHPExcel\Support\CsvDialect::resolve($options);
     }
+
 
     /**
      * Detect character encoding for CSV/text files without loading the full file.
@@ -432,7 +434,7 @@ final class MnbExcel
         return new ReadSession($path, new OdsReader(), $options);
     }
 
-    /** Optional legacy XLS adapter; requires phpoffice/phpspreadsheet. */
+    /** Native BIFF8 XLS reader. */
     public static function readXls(string $path, array|ReaderOptions $options = []): ReadSession
     {
         return new ReadSession($path, new XlsReader(), $options);
@@ -569,6 +571,7 @@ final class MnbExcel
         return new LargeXlsxReadSession($path, null, $options);
     }
 
+
     /**
      * Create a streaming XLSX/CSV-ZIP export session for very large exports.
      * The iterable is consumed once and rows are never buffered as a full workbook.
@@ -652,6 +655,7 @@ final class MnbExcel
             'route' => $advice['recommended_route'],
         ];
     }
+
 
     /**
      * Stream a large XLSX file into a SQL table using chunk validation, PDO batch inserts,
@@ -965,62 +969,6 @@ final class MnbExcel
         return (new XlsxInspector())->inspect($path, $options);
     }
 
-    /**
-     * Return XLSX file/package information without hydrating worksheet rows.
-     *
-     * @param array<string,mixed> $options
-     * @return array<string,mixed>
-     */
-    public static function fileInfo(string $path, array $options = []): array
-    {
-        return Xlsx::fileInfo($path, $options);
-    }
-
-    /**
-     * Return lightweight information for every XLSX worksheet.
-     *
-     * @param array<string,mixed> $options
-     * @return list<array<string,mixed>>
-     */
-    public static function sheetsInfo(string $path, array $options = []): array
-    {
-        return Xlsx::sheetsInfo($path, $options);
-    }
-
-    /**
-     * Return lightweight information for one XLSX worksheet.
-     *
-     * @param array<string,mixed> $options
-     * @return array<string,mixed>
-     */
-    public static function sheetInfo(string $path, int|string $sheet = 1, array $options = []): array
-    {
-        return Xlsx::sheetInfo($path, $sheet, $options);
-    }
-
-    /**
-     * Count XLSX worksheet rows without converting rows to PHP arrays.
-     *
-     * Supported modes: filled, physical, last_row, declared.
-     *
-     * @param array<string,mixed> $options
-     */
-    public static function rowCount(string $path, int|string $sheet = 1, array $options = []): int
-    {
-        return Xlsx::rowCount($path, $sheet, $options);
-    }
-
-    /**
-     * Count rows for every XLSX worksheet without converting rows to PHP arrays.
-     *
-     * @param array<string,mixed> $options
-     * @return array<string,int>
-     */
-    public static function rowCounts(string $path, array $options = []): array
-    {
-        return Xlsx::rowCounts($path, $options);
-    }
-
     /** @return list<string> */
     public static function sheetNames(string $path, array $options = []): array
     {
@@ -1058,6 +1006,7 @@ final class MnbExcel
             );
         }
     }
+
 
     /**
      * Preview import quality before validation or SQL insert.

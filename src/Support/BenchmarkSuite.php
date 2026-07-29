@@ -36,12 +36,6 @@ final class BenchmarkSuite
                     'command' => 'php tools/benchmark-large-reader.php --file=generated-{rows}.xlsx --chunk=5000',
                     'measures' => ['elapsed_seconds', 'peak_memory_mb', 'rows_per_second'],
                 ],
-                'phpoffice_phpspreadsheet' => [
-                    'package' => 'phpoffice/phpspreadsheet',
-                    'mode' => 'comparison_optional_dependency',
-                    'install' => 'composer require --dev phpoffice/phpspreadsheet',
-                    'note' => 'Use only when the optional comparison dependency is installed in a benchmark workspace.',
-                ],
                 'openspout_openspout' => [
                     'package' => 'openspout/openspout',
                     'mode' => 'comparison_optional_dependency',

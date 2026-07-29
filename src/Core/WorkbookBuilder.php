@@ -19,7 +19,7 @@ use Mnb\PHPExcel\Writer\CsvWriter;
 use Mnb\PHPExcel\Writer\JsonWriter;
 use Mnb\PHPExcel\Writer\XmlWriter;
 use Mnb\PHPExcel\Writer\XlsxWriter;
-use Mnb\PHPExcel\Compatibility\XlsWriter;
+use Mnb\PHPExcel\Writer\XlsWriter;
 use PDO;
 
 final class WorkbookBuilder

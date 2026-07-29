@@ -1,29 +1,24 @@
-# mnb/mnb-phpexcel-application
+# MNB PHPExcel Application
 
-Legacy facade, workbook builder, application helpers, plugins, diagnostics, and full workflow API for MNB PHPExcel.
-
-This package is generated from the MNB PHPExcel monorepo. Do not copy source files between modules manually.
-
-## Install
+Complete facade, workbook builder, diagnostics, plugins, queues, HTTP helpers, mail workflows, and cross-format application API.
 
 ```bash
-composer require mnb/mnb-phpexcel-application
+composer require mnb/mnb-phpexcel-application:^2.0
 ```
-
-See the main project documentation for typed options, streaming reads, and compatibility notes.
-
-## XLSX lightweight information facade
-
-The application facade delegates lightweight XLSX inspection to
-`mnb/mnb-phpexcel-xlsx`:
 
 ```php
 use Mnb\PHPExcel\MnbExcel;
 
-$file = MnbExcel::fileInfo('orders.xlsx');
-$sheets = MnbExcel::sheetsInfo('orders.xlsx');
-$rows = MnbExcel::rowCount('orders.xlsx', 'Orders');
+$rows = MnbExcel::read('report.xlsx')
+    ->sheet('Data')
+    ->withHeaderRow()
+    ->toArray();
+
+MnbExcel::fromArray($rows)
+    ->withHeader()
+    ->freezeHeader()
+    ->autoWidth()
+    ->save('report-copy.xlsx');
 ```
 
-The implementation remains in the XLSX package; the core package is unchanged.
-
+The application package installs every format and integration module at the same `^2.0` release line, including native XLS and the optional XLSX/database bridge.
