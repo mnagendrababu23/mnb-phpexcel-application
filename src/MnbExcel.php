@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mnb\PHPExcel;
 
+use Mnb\PHPExcel\Cloud\CloudAccess;
 use Mnb\PHPExcel\Application\ImportJobRunner;
 use Mnb\PHPExcel\Application\ImportProfile;
 use Mnb\PHPExcel\Application\ImportProfileManager;
@@ -85,6 +86,7 @@ use Mnb\PHPExcel\Validation\CustomValidatorRegistry;
 
 final class MnbExcel
 {
+    use CloudAccess;
     public const VERSION = '2.0.0';
 
     private static ?ReaderRegistry $readerRegistry = null;
